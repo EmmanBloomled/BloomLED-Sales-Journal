@@ -1,0 +1,1447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BloomLED Learning Journal</title>
+
+<!--
+  ============================================================================
+  BLOOMLED TEAM LEARNING JOURNAL
+  ============================================================================
+  A shared knowledge base for the BloomLED sales & ops team. Every site visit,
+  client call, quotation, and installation teaches something — this app is
+  where that gets written down so it isn't lost.
+
+  SETUP INSTRUCTIONS ARE AT THE VERY BOTTOM OF THIS FILE (after </html>,
+  in a comment block) AND ALSO PRINTED IN THE README SENT ALONGSIDE THIS FILE.
+  Read them before sharing this file with the team.
+
+  Quick orientation for anyone editing this file later:
+  - All styling is in the <style> block below.
+  - All app logic is vanilla JavaScript in the <script> block at the bottom.
+  - Supabase is used as the shared database. Until you add real credentials
+    (see SUPABASE CONFIG below), the app runs in DEMO MODE with sample data
+    kept only in memory (nothing is saved, and nothing is shared between
+    people) so you can see how everything looks and works right away.
+  ============================================================================
+-->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  /* ==========================================================================
+     DESIGN TOKENS
+     Palette is built around BloomLED's two worlds: "bloom" (growth, plants,
+     the company name) and "LED module grid" (the product itself). Foliage
+     green + warm signal-amber, on a cool paper background — not the default
+     terracotta/cream or dark-mode-neon combos.
+     ========================================================================== */
+  :root {
+    --paper: #F6F7F4;
+    --surface: #FFFFFF;
+    --ink: #1B2420;
+    --ink-soft: #4B564E;
+    --muted: #7B8479;
+    --line: #E2E6DF;
+    --bloom: #3F6B4F;
+    --bloom-deep: #2C4E38;
+    --bloom-tint: #E7EFE7;
+    --signal: #E8A33D;
+    --signal-tint: #FBF0DC;
+    --danger: #B4483A;
+    --danger-tint: #F7E9E6;
+
+    --font-display: 'Fraunces', Georgia, serif;
+    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+
+    --radius-s: 6px;
+    --radius-m: 10px;
+    --shadow-hover: 0 6px 20px rgba(27, 36, 32, 0.08);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font-body);
+    background: var(--paper);
+    color: var(--ink);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  }
+
+  a { color: inherit; }
+  button { font-family: inherit; cursor: pointer; }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 10px; }
+
+  /* --------------------------------------------------------------------------
+     APP SHELL
+     -------------------------------------------------------------------------- */
+  .app {
+    display: grid;
+    grid-template-columns: 232px 1fr;
+    min-height: 100vh;
+  }
+
+  /* Left rail navigation (desktop) */
+  .rail {
+    background: var(--surface);
+    border-right: 1px solid var(--line);
+    padding: 28px 18px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .rail-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 6px 26px 6px;
+  }
+
+  .rail-brand .mark {
+    width: 30px; height: 30px;
+    border-radius: 7px;
+    background: var(--bloom);
+    position: relative;
+    flex-shrink: 0;
+  }
+  .rail-brand .mark::before, .rail-brand .mark::after {
+    content: "";
+    position: absolute;
+    background: var(--signal);
+    border-radius: 2px;
+  }
+  .rail-brand .mark::before { width: 6px; height: 6px; top: 6px; left: 6px; }
+  .rail-brand .mark::after { width: 6px; height: 6px; bottom: 6px; right: 6px; }
+
+  .rail-brand .name {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 16.5px;
+    letter-spacing: 0.01em;
+    line-height: 1.15;
+  }
+  .rail-brand .name small {
+    display: block;
+    font-family: var(--font-body);
+    font-weight: 500;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+  }
+
+  .rail-nav { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+
+  .rail-link {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 9px 10px;
+    border-radius: var(--radius-s);
+    color: var(--ink-soft);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    background: none;
+    text-align: left;
+    width: 100%;
+  }
+  .rail-link svg { width: 18px; height: 18px; flex-shrink: 0; }
+  .rail-link:hover { background: var(--paper); color: var(--ink); }
+  .rail-link.active { background: var(--bloom-tint); color: var(--bloom-deep); font-weight: 600; }
+
+  .rail-foot {
+    margin-top: auto;
+    font-size: 11.5px;
+    color: var(--muted);
+    padding: 10px 6px 0 6px;
+    border-top: 1px solid var(--line);
+  }
+  .rail-foot .dot {
+    display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    margin-right: 6px; position: relative; top: -1px;
+  }
+  .rail-foot .dot.live { background: var(--bloom); }
+  .rail-foot .dot.demo { background: var(--signal); }
+
+  /* Mobile bottom tab bar */
+  .tabbar {
+    display: none;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    z-index: 50;
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+  }
+  .tabbar-row { display: flex; justify-content: space-around; }
+  .tabbar .rail-link { flex-direction: column; gap: 3px; font-size: 10.5px; padding: 6px 4px; text-align: center; }
+  .tabbar .rail-link svg { width: 20px; height: 20px; }
+
+  main.view { padding: 34px 40px 60px; max-width: 980px; }
+
+  @media (max-width: 880px) {
+    .app { grid-template-columns: 1fr; }
+    .rail { display: none; }
+    .tabbar { display: block; }
+    main.view { padding: 22px 16px 90px; }
+  }
+
+  /* --------------------------------------------------------------------------
+     SHARED PATTERNS
+     -------------------------------------------------------------------------- */
+  .page-head { margin-bottom: 26px; }
+  .page-head h1 {
+    font-family: var(--font-display);
+    font-size: 30px;
+    font-weight: 600;
+    margin: 0 0 6px;
+    letter-spacing: -0.01em;
+  }
+  .page-head p { margin: 0; color: var(--muted); font-size: 14.5px; max-width: 60ch; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    padding: 10px 16px;
+    border-radius: var(--radius-s);
+    border: 1px solid transparent;
+    font-size: 14px;
+    font-weight: 600;
+    transition: background 0.12s ease, border-color 0.12s ease, transform 0.05s ease;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary { background: var(--bloom); color: #fff; }
+  .btn-primary:hover { background: var(--bloom-deep); }
+  .btn-ghost { background: transparent; border-color: var(--line); color: var(--ink-soft); }
+  .btn-ghost:hover { border-color: var(--ink-soft); color: var(--ink); }
+  .btn-danger { background: transparent; border-color: var(--danger-tint); color: var(--danger); }
+  .btn-danger:hover { background: var(--danger-tint); }
+  .btn-sm { padding: 6px 11px; font-size: 12.5px; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+  }
+
+  .pill {
+    display: inline-flex; align-items: center;
+    padding: 3px 10px;
+    border-radius: 100px;
+    font-size: 12px;
+    font-weight: 600;
+    background: var(--bloom-tint);
+    color: var(--bloom-deep);
+    white-space: nowrap;
+  }
+  .pill.tag { background: var(--paper); color: var(--ink-soft); font-weight: 500; border: 1px solid var(--line); }
+  .pill.setting { background: var(--signal-tint); color: #8A5A16; }
+
+  .toast {
+    position: fixed;
+    bottom: 26px; left: 50%;
+    transform: translateX(-50%) translateY(8px);
+    background: var(--ink);
+    color: #fff;
+    padding: 11px 18px;
+    border-radius: var(--radius-s);
+    font-size: 13.5px;
+    font-weight: 500;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+    z-index: 200;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+
+  /* --------------------------------------------------------------------------
+     DASHBOARD
+     -------------------------------------------------------------------------- */
+  .hero {
+    background: var(--bloom-deep);
+    border-radius: 16px;
+    padding: 34px 32px;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 28px;
+    overflow: hidden;
+    position: relative;
+  }
+  .hero-text h2 {
+    font-family: var(--font-display);
+    font-size: 26px;
+    font-weight: 600;
+    margin: 0 0 8px;
+    max-width: 20ch;
+  }
+  .hero-text p { margin: 0 0 18px; color: #D9E4DB; font-size: 14px; max-width: 40ch; }
+  .hero .btn-primary { background: var(--signal); color: #3A2705; }
+  .hero .btn-primary:hover { background: #f0af4f; }
+
+  .pixel-grid { display: grid; grid-template-columns: repeat(8, 12px); grid-template-rows: repeat(6, 12px); gap: 4px; flex-shrink: 0; }
+  .pixel-grid i { display: block; width: 12px; height: 12px; border-radius: 2px; background: rgba(255,255,255,0.08); }
+  .pixel-grid i.on { background: var(--signal); animation: flicker-in 0.5s ease both; }
+  @keyframes flicker-in { from { opacity: 0; transform: scale(0.4); } to { opacity: 1; transform: scale(1); } }
+
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-bottom: 30px;
+  }
+  @media (max-width: 780px) { .stat-row { grid-template-columns: repeat(2, 1fr); } }
+
+  .stat {
+    padding: 16px 16px 14px;
+  }
+  .stat .num {
+    font-family: var(--font-display);
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--bloom-deep);
+  }
+  .stat .label { font-size: 12.5px; color: var(--muted); margin-top: 6px; font-weight: 500; }
+
+  .section-title {
+    display: flex; align-items: center; justify-content: space-between;
+    margin: 6px 0 14px;
+  }
+  .section-title h3 { font-size: 15px; margin: 0; font-weight: 600; }
+  .section-title a.see-all { font-size: 13px; color: var(--bloom-deep); font-weight: 600; text-decoration: none; }
+
+  /* --------------------------------------------------------------------------
+     JOURNAL FEED + ENTRY CARDS
+     -------------------------------------------------------------------------- */
+  .toolbar {
+    display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 22px; align-items: center;
+  }
+  .toolbar input[type=text], .toolbar select {
+    font-family: inherit; font-size: 13.5px;
+    padding: 9px 12px;
+    border-radius: var(--radius-s);
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink);
+  }
+  .toolbar .search-wrap { position: relative; flex: 1; min-width: 200px; }
+  .toolbar .search-wrap input { width: 100%; padding-left: 34px; }
+  .toolbar .search-wrap svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--muted); }
+  .toolbar select { min-width: 130px; }
+  .toolbar .clear-filters { font-size: 12.5px; color: var(--muted); background: none; border: none; text-decoration: underline; padding: 4px; }
+
+  .feed { display: flex; flex-direction: column; gap: 12px; }
+
+  .entry {
+    display: flex;
+    border-left: 4px solid var(--topic-color, var(--bloom));
+    border-radius: var(--radius-m);
+    overflow: hidden;
+    transition: box-shadow 0.15s ease;
+  }
+  .entry:hover { box-shadow: var(--shadow-hover); }
+  .entry-body { padding: 16px 18px; flex: 1; }
+
+  .entry-top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+  .entry-title { font-family: var(--font-display); font-size: 17px; font-weight: 600; margin: 0 0 5px; cursor: pointer; }
+  .entry-title:hover { text-decoration: underline; text-decoration-color: var(--line); }
+  .entry-meta { font-size: 12.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-bottom: 10px; }
+  .entry-meta .sep { color: var(--line); }
+
+  .entry-key { font-size: 14px; color: var(--ink-soft); margin: 0 0 10px; }
+  .entry-topics { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+
+  .entry-detail {
+    display: none;
+    margin-top: 12px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+    font-size: 14px;
+    color: var(--ink-soft);
+  }
+  .entry-detail.open { display: block; }
+  .entry-detail .field { margin-bottom: 12px; }
+  .entry-detail .field-label { font-weight: 600; color: var(--ink); font-size: 12.5px; margin-bottom: 3px; }
+
+  .entry-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; align-items: center; }
+  .reaction-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--paper); border: 1px solid var(--line);
+    padding: 6px 11px; border-radius: 100px; font-size: 12.5px; font-weight: 600; color: var(--ink-soft);
+  }
+  .reaction-btn:hover { border-color: var(--bloom); color: var(--bloom-deep); }
+  .reaction-btn.active { background: var(--bloom-tint); border-color: var(--bloom); color: var(--bloom-deep); }
+
+  .comments { margin-top: 16px; }
+  .comment { padding: 10px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
+  .comment .c-head { font-weight: 600; font-size: 13px; margin-bottom: 2px; }
+  .comment .c-head span { font-weight: 500; color: var(--muted); margin-left: 6px; }
+  .comment-form { display: flex; gap: 8px; margin-top: 10px; }
+  .comment-form input { flex: 1; font-family: inherit; font-size: 13.5px; padding: 8px 10px; border-radius: var(--radius-s); border: 1px solid var(--line); }
+
+  .empty-state {
+    text-align: center; padding: 60px 20px; color: var(--muted);
+  }
+  .empty-state .glyph { font-size: 32px; margin-bottom: 10px; }
+  .empty-state h4 { font-family: var(--font-display); font-size: 18px; color: var(--ink); margin: 0 0 6px; }
+
+  /* --------------------------------------------------------------------------
+     ADD LEARNING FORM
+     -------------------------------------------------------------------------- */
+  .form-card { padding: 28px 30px 30px; max-width: 700px; }
+  .form-row { margin-bottom: 20px; }
+  .form-row label {
+    display: block; font-size: 13px; font-weight: 600; margin-bottom: 7px; color: var(--ink);
+  }
+  .form-row .hint { font-weight: 500; color: var(--muted); font-size: 12px; }
+  .form-row input[type=text], .form-row input[type=date], .form-row select, .form-row textarea {
+    width: 100%; font-family: inherit; font-size: 14px;
+    padding: 10px 12px; border-radius: var(--radius-s);
+    border: 1px solid var(--line); background: var(--paper); color: var(--ink);
+  }
+  .form-row textarea { resize: vertical; min-height: 70px; }
+  .form-row input:focus, .form-row select:focus, .form-row textarea:focus {
+    outline: none; border-color: var(--bloom); background: #fff;
+  }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 600px) { .two-col { grid-template-columns: 1fr; } }
+
+  .chip-picker { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    padding: 7px 13px; border-radius: 100px; border: 1px solid var(--line);
+    background: var(--paper); font-size: 13px; font-weight: 500; color: var(--ink-soft);
+  }
+  .chip.selected { background: var(--bloom); border-color: var(--bloom); color: #fff; }
+  .chip.add-new { background: transparent; border-style: dashed; color: var(--muted); }
+
+  .form-foot { display: flex; gap: 10px; margin-top: 26px; align-items: center; }
+  .form-msg { font-size: 13px; color: var(--bloom-deep); font-weight: 600; }
+
+  /* --------------------------------------------------------------------------
+     TOPICS LIBRARY
+     -------------------------------------------------------------------------- */
+  .topic-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px;
+    margin-bottom: 30px;
+  }
+  .topic-tile {
+    padding: 18px; text-align: left; border-top: 3px solid var(--topic-color, var(--bloom));
+  }
+  .topic-tile:hover { box-shadow: var(--shadow-hover); }
+  .topic-tile .t-name { font-family: var(--font-display); font-size: 16.5px; font-weight: 600; margin-bottom: 4px; }
+  .topic-tile .t-count { font-size: 12.5px; color: var(--muted); }
+
+  .topic-detail-list { display: flex; flex-direction: column; gap: 10px; }
+  .topic-detail-item {
+    padding: 13px 16px; display: flex; justify-content: space-between; gap: 10px; align-items: center;
+  }
+  .topic-detail-item .ti-title { font-weight: 600; font-size: 14px; cursor: pointer; }
+  .topic-detail-item .ti-title:hover { text-decoration: underline; }
+  .topic-detail-item .ti-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  .back-link { font-size: 13px; color: var(--bloom-deep); font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; margin-bottom: 18px; background: none; border: none; padding: 0; }
+
+  /* --------------------------------------------------------------------------
+     INSIGHTS
+     -------------------------------------------------------------------------- */
+  .insight-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 18px; margin-bottom: 20px; }
+  @media (max-width: 780px) { .insight-grid { grid-template-columns: 1fr; } }
+  .insight-card { padding: 22px 24px; }
+  .insight-card h4 { font-family: var(--font-display); font-size: 15.5px; margin: 0 0 16px; font-weight: 600; }
+
+  .bar-row { display: grid; grid-template-columns: 130px 1fr 34px; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .bar-row .b-label { font-size: 12.5px; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar-track { background: var(--paper); border-radius: 6px; height: 9px; overflow: hidden; }
+  .bar-fill { height: 100%; background: var(--bloom); border-radius: 6px; }
+  .bar-row .b-num { font-size: 12px; color: var(--muted); text-align: right; }
+
+  .leader-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); }
+  .leader-row:first-child { border-top: none; }
+  .avatar {
+    width: 30px; height: 30px; border-radius: 50%; background: var(--bloom-tint); color: var(--bloom-deep);
+    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12.5px; flex-shrink: 0;
+  }
+  .leader-row .l-name { font-size: 13.5px; font-weight: 600; flex: 1; }
+  .leader-row .l-count { font-size: 12.5px; color: var(--muted); }
+
+  /* Modal (edit) */
+  .modal-backdrop {
+    display: none; position: fixed; inset: 0; background: rgba(27,36,32,0.4);
+    z-index: 100; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal { background: #fff; border-radius: var(--radius-m); max-width: 640px; width: 100%; max-height: 88vh; overflow-y: auto; padding: 26px 28px; }
+  .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+  .modal-head h3 { font-family: var(--font-display); font-size: 18px; margin: 0; }
+  .modal-close { background: none; border: none; font-size: 20px; color: var(--muted); line-height: 1; padding: 4px; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- ============================ LEFT NAV (desktop) ============================ -->
+  <nav class="rail">
+    <div class="rail-brand">
+      <div class="mark"></div>
+      <div class="name">BloomLED<small>Learning Journal</small></div>
+    </div>
+    <div class="rail-nav" id="railNav"></div>
+    <div class="rail-foot" id="railFoot"></div>
+  </nav>
+
+  <!-- ============================ MAIN VIEWS ============================ -->
+  <main class="view" id="viewRoot"></main>
+</div>
+
+<!-- ============================ BOTTOM TAB BAR (mobile) ============================ -->
+<nav class="tabbar">
+  <div class="tabbar-row" id="tabbarNav"></div>
+</nav>
+
+<!-- Edit modal -->
+<div class="modal-backdrop" id="editBackdrop">
+  <div class="modal" id="editModal"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- ============================================================================
+     SUPABASE (js client via CDN). Loaded with defer so DOM/app JS below sets up
+     the page shell first, then boot() runs once everything is ready.
+     ============================================================================ -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+/* ============================================================================
+   SUPABASE CONFIG
+   ----------------------------------------------------------------------------
+   Paste your project's URL and public "anon" key below. Until you do, the
+   app runs in DEMO MODE: sample entries are generated in memory so you can
+   see how it works, but nothing is saved and nothing is shared with
+   teammates. Full setup steps are in the comment block at the very bottom
+   of this file.
+   ============================================================================ */
+const SUPABASE_URL = "YOUR_SUPABASE_URL_HERE";
+const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY_HERE";
+
+const DEMO_MODE = SUPABASE_URL.includes("YOUR_SUPABASE_URL_HERE") || SUPABASE_ANON_KEY.includes("YOUR_SUPABASE_ANON_KEY_HERE");
+
+let supabaseClient = null;
+if (!DEMO_MODE) {
+  supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+}
+
+/* ============================================================================
+   STATIC DATA: topics + colors, work settings
+   ============================================================================ */
+const DEFAULT_TOPICS = [
+  "Sales & Client Communication", "Negotiation", "Pricing & Quotation",
+  "Product Knowledge", "LED Wall Technical", "Ocular / Site Inspection",
+  "Installation & Operations", "CRM / HubSpot", "Lead Management",
+  "Bidding / PhilGEPS", "Project Management", "After-Sales / Client Retention",
+  "Team Management", "Mistakes & Lessons Learned", "Best Practices", "New Ideas / Improvements"
+];
+
+// A calm, non-neon color assigned per topic (cycled), used as the entry's left accent.
+const TOPIC_PALETTE = ["#3F6B4F", "#E8A33D", "#5B7FA6", "#B4483A", "#8A6BAE", "#4A9B8E", "#C77D3C", "#6E7F4A"];
+function topicColor(topic) {
+  const list = getAllTopics();
+  const idx = list.indexOf(topic);
+  return TOPIC_PALETTE[(idx >= 0 ? idx : 0) % TOPIC_PALETTE.length];
+}
+
+const WORK_SETTINGS = ["Office", "Client Meeting", "Field / Ocular", "Installation", "Call", "Online Meeting", "Other"];
+
+/* ============================================================================
+   APP STATE
+   ============================================================================ */
+let state = {
+  route: "dashboard",           // dashboard | add | journal | topics | topicDetail | insights
+  entries: [],                  // learnings, newest first
+  customTopics: [],             // topics added by users beyond the defaults
+  filters: { q: "", topic: "", author: "", setting: "", tag: "" },
+  activeTopicDetail: null,
+  editingId: null
+};
+
+function getAllTopics() {
+  return [...DEFAULT_TOPICS, ...state.customTopics];
+}
+
+/* ============================================================================
+   DEMO SEED DATA (only used when Supabase isn't configured yet)
+   ============================================================================ */
+function seedDemoData() {
+  const today = new Date();
+  const daysAgo = (n) => { const d = new Date(today); d.setDate(d.getDate() - n); return d.toISOString().slice(0,10); };
+
+  state.entries = [
+    {
+      id: "demo-1", author: "Sheena Mae Revilloza", entry_date: daysAgo(0),
+      title: "Client didn't realize warranty was already included in the estimate",
+      topics: ["Sales & Client Communication", "Pricing & Quotation"],
+      work_setting: "Client Meeting",
+      experience: "Client pushed back hard on price, comparing us to a supplier who quoted almost half. Turned out they were comparing a bare hardware quote against our all-in estimate.",
+      key_learning: "Always state up front, before giving the number, everything the estimate already includes (delivery, installation, warranty, training).",
+      what_worked: "Walking through the price line by line calmed them down once they saw what was bundled in.",
+      what_improve: "I should have led with the inclusions instead of leading with the price.",
+      next_time: "Use the 'binigay sa inyo ay kasama na' script from the RTB FAQ sheet as the opening line, not a fallback.",
+      tags: ["price objection", "estimate", "client education"],
+      likes: 4, insights: 2, created_at: new Date(Date.now() - 1*3600*1000).toISOString(),
+      comments: [{ author: "Jansen Milagrosa", comment: "Same thing happened to me sa Ortigas client last week, sobrang useful talaga itong script na 'to.", created_at: new Date().toISOString() }]
+    },
+    {
+      id: "demo-2", author: "Dennis Apoc", entry_date: daysAgo(1),
+      title: "Ocular revealed a wall load issue the client hadn't mentioned",
+      topics: ["Ocular / Site Inspection", "LED Wall Technical"],
+      work_setting: "Field / Ocular",
+      experience: "Site ocular for a lobby installation. The proposed mounting wall was drywall, not concrete — client assumed any wall would work.",
+      key_learning: "Always ask for wall material and take a photo of the mounting surface during the ocular, not just measurements.",
+      what_worked: "Bringing the checklist caught it before we quoted the wrong bracket system.",
+      what_improve: "Our ocular checklist doesn't explicitly ask 'what is the wall made of' — it should.",
+      next_time: "Propose adding a wall-material field to the ocular checklist in next L10.",
+      tags: ["ocular checklist", "structural", "mounting"],
+      likes: 6, insights: 3, created_at: new Date(Date.now() - 26*3600*1000).toISOString(), comments: []
+    },
+    {
+      id: "demo-3", author: "Xiel Esmao", entry_date: daysAgo(3),
+      title: "PhilGEPS bid got disqualified over a missing document tab",
+      topics: ["Bidding / PhilGEPS", "Mistakes & Lessons Learned"],
+      work_setting: "Office",
+      experience: "Submitted a bid for an LGU project. Technical documents were complete but we missed a required financial statement tab in the eBid system.",
+      key_learning: "The eBid portal has separate tabs for technical and financial documents — both need to be checked off, not just uploaded.",
+      what_worked: "N/A this time — this one was a straight miss.",
+      what_improve: "We need a submission checklist specific to the PhilGEPS portal, separate from our general document checklist.",
+      next_time: "Build a PhilGEPS submission checklist and have a second person verify before the deadline.",
+      tags: ["philgeps", "compliance", "checklist"],
+      likes: 8, insights: 5, created_at: new Date(Date.now() - 3*24*3600*1000).toISOString(),
+      comments: [{ author: "Emman Apostol", comment: "Good catch — let's turn this into an official Playbook item this week.", created_at: new Date().toISOString() }]
+    },
+    {
+      id: "demo-4", author: "Lennard Agulto", entry_date: daysAgo(4),
+      title: "Hybrid controller closed the deal for a hotel that wanted both signage and livestreaming",
+      topics: ["Product Knowledge", "Sales & Client Communication"],
+      work_setting: "Client Meeting",
+      experience: "Hotel client wanted an LED wall mainly for ads but occasionally for livestreaming events. They almost went with a competitor who said this wasn't possible on one unit.",
+      key_learning: "Our TU series hybrid controller supports both continuous looping content and livestreaming — this is a real differentiator most clients don't know to ask about.",
+      what_worked: "Leading with the hybrid controller capability instead of waiting for them to ask.",
+      what_improve: "None — this should just become a standard line in our pitch deck.",
+      next_time: "Add hybrid controller capability as a bullet in the standard sales deck, not just something reps mention if they remember.",
+      tags: ["hybrid controller", "differentiator", "hospitality"],
+      likes: 5, insights: 4, created_at: new Date(Date.now() - 4*24*3600*1000).toISOString(), comments: []
+    },
+    {
+      id: "demo-5", author: "Juneth Villamayor", entry_date: daysAgo(6),
+      title: "Follow-up email got no response — sent it on a Friday afternoon",
+      topics: ["Lead Management", "CRM / HubSpot"],
+      work_setting: "Office",
+      experience: "Sent a proposal follow-up at 5pm Friday. No reply the following week; had to send a second follow-up.",
+      key_learning: "Timing of follow-ups matters — Friday afternoon sends tend to get buried by Monday.",
+      what_worked: "The second follow-up on Tuesday morning got a response within the hour.",
+      what_improve: "I should schedule follow-ups for Tuesday-Thursday mornings by default.",
+      next_time: "Use HubSpot's send-later feature to queue follow-ups for optimal times instead of sending immediately when I remember to.",
+      tags: ["follow-up timing", "hubspot", "email"],
+      likes: 3, insights: 2, created_at: new Date(Date.now() - 6*24*3600*1000).toISOString(), comments: []
+    }
+  ];
+}
+
+/* ============================================================================
+   DATA LAYER — abstracts over Supabase vs. in-memory demo mode so the rest
+   of the app never needs to know which one it's talking to.
+   ============================================================================ */
+const Data = {
+  async loadAll() {
+    if (DEMO_MODE) {
+      if (state.entries.length === 0) seedDemoData();
+      return;
+    }
+    const { data: learnings, error } = await supabaseClient
+      .from("learnings").select("*").order("created_at", { ascending: false });
+    if (error) { console.error(error); showToast("Couldn't load entries — check Supabase config."); return; }
+
+    const { data: comments } = await supabaseClient.from("comments").select("*").order("created_at", { ascending: true });
+
+    state.entries = (learnings || []).map(l => ({
+      ...l,
+      topics: l.topics || [],
+      tags: l.tags || [],
+      comments: (comments || []).filter(c => c.learning_id === l.id)
+    }));
+  },
+
+  async add(entry) {
+    if (DEMO_MODE) {
+      const newEntry = { ...entry, id: "demo-" + Date.now(), likes: 0, insights: 0, created_at: new Date().toISOString(), comments: [] };
+      state.entries.unshift(newEntry);
+      return newEntry;
+    }
+    const { data, error } = await supabaseClient.from("learnings").insert([entry]).select();
+    if (error) { console.error(error); showToast("Couldn't save — check Supabase config."); return null; }
+    const newEntry = { ...data[0], comments: [] };
+    state.entries.unshift(newEntry);
+    return newEntry;
+  },
+
+  async update(id, fields) {
+    const local = state.entries.find(e => e.id === id);
+    if (DEMO_MODE) {
+      Object.assign(local, fields);
+      return;
+    }
+    const { error } = await supabaseClient.from("learnings").update(fields).eq("id", id);
+    if (error) { console.error(error); showToast("Couldn't update — check Supabase config."); return; }
+    Object.assign(local, fields);
+  },
+
+  async remove(id) {
+    if (!DEMO_MODE) {
+      const { error } = await supabaseClient.from("learnings").delete().eq("id", id);
+      if (error) { console.error(error); showToast("Couldn't delete — check Supabase config."); return; }
+    }
+    state.entries = state.entries.filter(e => e.id !== id);
+  },
+
+  async addComment(learningId, author, comment) {
+    const entry = state.entries.find(e => e.id === learningId);
+    const newComment = { author, comment, created_at: new Date().toISOString() };
+    if (DEMO_MODE) {
+      entry.comments.push(newComment);
+      return;
+    }
+    const { error } = await supabaseClient.from("comments").insert([{ learning_id: learningId, author, comment }]);
+    if (error) { console.error(error); showToast("Couldn't post comment — check Supabase config."); return; }
+    entry.comments.push(newComment);
+  }
+};
+
+/* ============================================================================
+   ICONS (inline SVG, single stroke style, no external icon library needed)
+   ============================================================================ */
+const ICONS = {
+  dashboard: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="3.5" width="7" height="7" rx="1.3"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.3"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.3"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.3"/></svg>`,
+  add: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><path d="M12 8v8M8 12h8"/></svg>`,
+  journal: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4.5h11a2 2 0 0 1 2 2V21l-3-2-3 2-3-2-3 2V4.5Z"/><path d="M8 9h6M8 12.5h6"/></svg>`,
+  topics: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="7" cy="7" r="3.3"/><circle cx="17" cy="7" r="3.3"/><circle cx="7" cy="17" r="3.3"/><circle cx="17" cy="17" r="3.3"/></svg>`,
+  insights: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M11 20V4M18 20v-7"/></svg>`,
+  search: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.4-4.4"/></svg>`,
+  back: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 5 8 12l7 7"/></svg>`
+};
+
+const NAV_ITEMS = [
+  { id: "dashboard", label: "Dashboard", icon: "dashboard" },
+  { id: "add", label: "Add Learning", icon: "add" },
+  { id: "journal", label: "Journal", icon: "journal" },
+  { id: "topics", label: "Topics", icon: "topics" },
+  { id: "insights", label: "Insights", icon: "insights" }
+];
+
+/* ============================================================================
+   NAV RENDERING
+   ============================================================================ */
+function renderNav() {
+  const linkHtml = (item) => `
+    <button class="rail-link ${state.route === item.id ? 'active' : ''}" onclick="navigate('${item.id}')">
+      ${ICONS[item.icon]}<span>${item.label}</span>
+    </button>`;
+  document.getElementById("railNav").innerHTML = NAV_ITEMS.map(linkHtml).join("");
+  document.getElementById("tabbarNav").innerHTML = NAV_ITEMS.map(linkHtml).join("");
+  document.getElementById("railFoot").innerHTML = DEMO_MODE
+    ? `<span class="dot demo"></span>Demo mode — connect Supabase to save & share`
+    : `<span class="dot live"></span>Connected — shared with the team`;
+}
+
+function navigate(route, extra) {
+  state.route = route;
+  if (route === "topicDetail") state.activeTopicDetail = extra;
+  render();
+  window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
+}
+
+/* ============================================================================
+   HELPERS
+   ============================================================================ */
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(showToast._timer);
+  showToast._timer = setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+function fmtDate(dateStr) {
+  const d = new Date(dateStr + (dateStr.length <= 10 ? "T00:00:00" : ""));
+  if (isNaN(d)) return dateStr;
+  return d.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function initials(name) {
+  return name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join("");
+}
+
+function isThisWeek(dateStr) {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const start = new Date(now); start.setDate(now.getDate() - now.getDay());
+  start.setHours(0,0,0,0);
+  return d >= start;
+}
+function isThisMonth(dateStr) {
+  const d = new Date(dateStr);
+  const now = new Date();
+  return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+}
+
+function escapeHtml(s) {
+  return (s || "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+
+function filteredEntries() {
+  const f = state.filters;
+  return state.entries.filter(e => {
+    if (f.topic && !e.topics.includes(f.topic)) return false;
+    if (f.author && e.author !== f.author) return false;
+    if (f.setting && e.work_setting !== f.setting) return false;
+    if (f.tag && !(e.tags || []).some(t => t.toLowerCase() === f.tag.toLowerCase())) return false;
+    if (f.q) {
+      const hay = [e.title, e.key_learning, e.experience, e.author, ...(e.tags||[])].join(" ").toLowerCase();
+      if (!hay.includes(f.q.toLowerCase())) return false;
+    }
+    return true;
+  });
+}
+
+function uniqueAuthors() {
+  return [...new Set(state.entries.map(e => e.author))].sort();
+}
+
+/* ============================================================================
+   RENDER: ROUTER
+   ============================================================================ */
+function render() {
+  renderNav();
+  const root = document.getElementById("viewRoot");
+  if (state.route === "dashboard") root.innerHTML = renderDashboard();
+  else if (state.route === "add") root.innerHTML = renderAddForm();
+  else if (state.route === "journal") root.innerHTML = renderJournal();
+  else if (state.route === "topics") root.innerHTML = renderTopics();
+  else if (state.route === "topicDetail") root.innerHTML = renderTopicDetail();
+  else if (state.route === "insights") root.innerHTML = renderInsights();
+
+  if (state.route === "add") setupChipPickers();
+}
+
+/* ---------------------------------------------------------------------------
+   DASHBOARD
+   --------------------------------------------------------------------------- */
+function renderDashboard() {
+  const total = state.entries.length;
+  const week = state.entries.filter(e => isThisWeek(e.entry_date)).length;
+  const month = state.entries.filter(e => isThisMonth(e.entry_date)).length;
+
+  const topicCounts = {};
+  state.entries.forEach(e => e.topics.forEach(t => topicCounts[t] = (topicCounts[t]||0)+1));
+  const topTopic = Object.entries(topicCounts).sort((a,b)=>b[1]-a[1])[0];
+
+  const authorCounts = {};
+  state.entries.forEach(e => authorCounts[e.author] = (authorCounts[e.author]||0)+1);
+  const contributors = Object.keys(authorCounts).length;
+
+  // Pixel grid: light up a number of cells proportional to total entries (capped)
+  const totalCells = 48;
+  const lit = Math.min(totalCells, total * 3);
+  let cells = "";
+  for (let i = 0; i < totalCells; i++) {
+    cells += `<i class="${i < lit ? 'on' : ''}" style="${i < lit ? `animation-delay:${i*18}ms` : ''}"></i>`;
+  }
+
+  const recent = state.entries.slice(0, 4);
+
+  return `
+    <div class="hero">
+      <div class="hero-text">
+        <h2>What did the team learn today?</h2>
+        <p>Every ocular, call, and negotiation teaches something. Write it down before it's forgotten.</p>
+        <button class="btn btn-primary" onclick="navigate('add')">${ICONS.add}Add a learning</button>
+      </div>
+      <div class="pixel-grid">${cells}</div>
+    </div>
+
+    <div class="stat-row">
+      <div class="card stat"><div class="num">${total}</div><div class="label">Total learnings</div></div>
+      <div class="card stat"><div class="num">${week}</div><div class="label">This week</div></div>
+      <div class="card stat"><div class="num">${month}</div><div class="label">This month</div></div>
+      <div class="card stat"><div class="num" style="font-size:19px; line-height:1.25; padding-top:2px;">${topTopic ? escapeHtml(topTopic[0]) : "—"}</div><div class="label">Most active topic</div></div>
+      <div class="card stat"><div class="num">${contributors}</div><div class="label">Contributors</div></div>
+    </div>
+
+    <div class="section-title"><h3>Recent learnings</h3><a class="see-all" href="#" onclick="navigate('journal');return false;">See all →</a></div>
+    <div class="feed">
+      ${recent.length ? recent.map(e => entryCard(e, false)).join("") : emptyState("No learnings yet", "Be the first to add one.")}
+    </div>
+  `;
+}
+
+/* ---------------------------------------------------------------------------
+   ADD LEARNING FORM
+   --------------------------------------------------------------------------- */
+function renderAddForm() {
+  const topics = getAllTopics();
+  return `
+    <div class="page-head">
+      <h1>Add a learning</h1>
+      <p>Two minutes now saves the next person hours later. Keep it honest — mistakes belong here too.</p>
+    </div>
+    <div class="card form-card">
+      <form id="learningForm" onsubmit="handleAddLearning(event)">
+        <div class="two-col">
+          <div class="form-row">
+            <label>Your name</label>
+            <input type="text" id="f_author" required placeholder="e.g. Sheena Mae Revilloza">
+          </div>
+          <div class="form-row">
+            <label>Date</label>
+            <input type="date" id="f_date" required value="${new Date().toISOString().slice(0,10)}">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label>Title of learning</label>
+          <input type="text" id="f_title" required placeholder="A short, specific headline — e.g. 'Client didn't realize warranty was included'">
+        </div>
+
+        <div class="form-row">
+          <label>Work setting</label>
+          <select id="f_setting" required>
+            <option value="" disabled selected>Choose one</option>
+            ${WORK_SETTINGS.map(s => `<option value="${s}">${s}</option>`).join("")}
+          </select>
+        </div>
+
+        <div class="form-row">
+          <label>Topic(s) <span class="hint">— select any that apply, or add a new one</span></label>
+          <div class="chip-picker" id="topicPicker">
+            ${topics.map(t => `<button type="button" class="chip" data-topic="${escapeHtml(t)}">${escapeHtml(t)}</button>`).join("")}
+            <button type="button" class="chip add-new" id="addTopicChip">+ New topic</button>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label>What happened / experience</label>
+          <textarea id="f_experience" required placeholder="Briefly describe the situation."></textarea>
+        </div>
+
+        <div class="form-row">
+          <label>Key learning</label>
+          <textarea id="f_key" required placeholder="The one-sentence takeaway someone else could apply immediately."></textarea>
+        </div>
+
+        <div class="two-col">
+          <div class="form-row">
+            <label>What worked</label>
+            <textarea id="f_worked" placeholder="Optional"></textarea>
+          </div>
+          <div class="form-row">
+            <label>What could be improved</label>
+            <textarea id="f_improve" placeholder="Optional"></textarea>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label>What we should do next time</label>
+          <textarea id="f_next" placeholder="Optional"></textarea>
+        </div>
+
+        <div class="form-row">
+          <label>Tags / keywords <span class="hint">— comma separated</span></label>
+          <input type="text" id="f_tags" placeholder="e.g. price objection, philgeps, hubspot">
+        </div>
+
+        <div class="form-foot">
+          <button type="submit" class="btn btn-primary">Save learning</button>
+          <button type="button" class="btn btn-ghost" onclick="navigate('dashboard')">Cancel</button>
+          <span class="form-msg" id="formMsg"></span>
+        </div>
+      </form>
+    </div>
+  `;
+}
+
+function setupChipPickers() {
+  const picker = document.getElementById("topicPicker");
+  if (!picker) return;
+  picker.querySelectorAll(".chip[data-topic]").forEach(chip => {
+    chip.addEventListener("click", () => chip.classList.toggle("selected"));
+  });
+  document.getElementById("addTopicChip").addEventListener("click", () => {
+    const name = prompt("New topic name:");
+    if (!name || !name.trim()) return;
+    const clean = name.trim();
+    if (!state.customTopics.includes(clean) && !DEFAULT_TOPICS.includes(clean)) state.customTopics.push(clean);
+    render();
+    // Re-select the newly added chip after re-render
+    setTimeout(() => {
+      const newChip = document.querySelector(`.chip[data-topic="${CSS.escape(clean)}"]`);
+      if (newChip) newChip.classList.add("selected");
+    }, 0);
+  });
+}
+
+async function handleAddLearning(evt) {
+  evt.preventDefault();
+  const selectedTopics = [...document.querySelectorAll("#topicPicker .chip.selected")].map(c => c.dataset.topic);
+  if (selectedTopics.length === 0) { showToast("Pick at least one topic."); return; }
+
+  const entry = {
+    author: document.getElementById("f_author").value.trim(),
+    entry_date: document.getElementById("f_date").value,
+    title: document.getElementById("f_title").value.trim(),
+    work_setting: document.getElementById("f_setting").value,
+    topics: selectedTopics,
+    experience: document.getElementById("f_experience").value.trim(),
+    key_learning: document.getElementById("f_key").value.trim(),
+    what_worked: document.getElementById("f_worked").value.trim(),
+    what_improve: document.getElementById("f_improve").value.trim(),
+    next_time: document.getElementById("f_next").value.trim(),
+    tags: document.getElementById("f_tags").value.split(",").map(t => t.trim()).filter(Boolean)
+  };
+
+  await Data.add(entry);
+  showToast("Learning saved to the journal 🌱");
+  navigate("journal");
+}
+
+/* ---------------------------------------------------------------------------
+   JOURNAL FEED
+   --------------------------------------------------------------------------- */
+function renderJournal() {
+  const list = filteredEntries();
+  const authors = uniqueAuthors();
+  const topics = getAllTopics();
+
+  return `
+    <div class="page-head">
+      <h1>Journal</h1>
+      <p>Everything the team has written down, newest first.</p>
+    </div>
+
+    <div class="toolbar">
+      <div class="search-wrap">
+        ${ICONS.search}
+        <input type="text" placeholder="Search title, learning, tags, author…" value="${escapeHtml(state.filters.q)}" oninput="setFilter('q', this.value)">
+      </div>
+      <select onchange="setFilter('topic', this.value)">
+        <option value="">All topics</option>
+        ${topics.map(t => `<option value="${escapeHtml(t)}" ${state.filters.topic===t?'selected':''}>${escapeHtml(t)}</option>`).join("")}
+      </select>
+      <select onchange="setFilter('author', this.value)">
+        <option value="">All authors</option>
+        ${authors.map(a => `<option value="${escapeHtml(a)}" ${state.filters.author===a?'selected':''}>${escapeHtml(a)}</option>`).join("")}
+      </select>
+      <select onchange="setFilter('setting', this.value)">
+        <option value="">All settings</option>
+        ${WORK_SETTINGS.map(s => `<option value="${s}" ${state.filters.setting===s?'selected':''}>${s}</option>`).join("")}
+      </select>
+      ${(state.filters.q||state.filters.topic||state.filters.author||state.filters.setting||state.filters.tag) ? `<button class="clear-filters" onclick="clearFilters()">Clear filters</button>` : ""}
+    </div>
+
+    <div class="feed">
+      ${list.length ? list.map(e => entryCard(e, true)).join("") : emptyState("No matching learnings", "Try clearing a filter or search term.")}
+    </div>
+  `;
+}
+
+function setFilter(key, value) {
+  state.filters[key] = value;
+  render();
+}
+function clearFilters() {
+  state.filters = { q: "", topic: "", author: "", setting: "", tag: "" };
+  render();
+}
+
+function entryCard(e, expandable) {
+  const color = topicColor(e.topics[0]);
+  const isOpen = state._openEntry === e.id;
+  return `
+  <div class="card entry" style="--topic-color:${color}">
+    <div class="entry-body">
+      <div class="entry-top">
+        <div style="flex:1;">
+          <h4 class="entry-title" onclick="toggleEntry('${e.id}')">${escapeHtml(e.title)}</h4>
+          <div class="entry-meta">
+            <span>${escapeHtml(e.author)}</span><span class="sep">·</span>
+            <span>${fmtDate(e.entry_date)}</span><span class="sep">·</span>
+            <span class="pill setting">${escapeHtml(e.work_setting)}</span>
+          </div>
+        </div>
+      </div>
+      <p class="entry-key">${escapeHtml(e.key_learning)}</p>
+      <div class="entry-topics">
+        ${e.topics.map(t => `<span class="pill" style="background:${topicColor(t)}22; color:${topicColor(t)}">${escapeHtml(t)}</span>`).join("")}
+        ${(e.tags||[]).map(t => `<span class="pill tag" onclick="setFilter('tag','${escapeHtml(t)}'); navigate('journal');">#${escapeHtml(t)}</span>`).join("")}
+      </div>
+
+      <div class="entry-detail ${isOpen ? 'open' : ''}" id="detail-${e.id}">
+        <div class="field"><div class="field-label">What happened</div>${escapeHtml(e.experience || "—")}</div>
+        ${e.what_worked ? `<div class="field"><div class="field-label">What worked</div>${escapeHtml(e.what_worked)}</div>` : ""}
+        ${e.what_improve ? `<div class="field"><div class="field-label">What could be improved</div>${escapeHtml(e.what_improve)}</div>` : ""}
+        ${e.next_time ? `<div class="field"><div class="field-label">Next time</div>${escapeHtml(e.next_time)}</div>` : ""}
+
+        <div class="entry-actions">
+          <button class="reaction-btn" onclick="react('${e.id}','likes')">👍 Helpful (${e.likes||0})</button>
+          <button class="reaction-btn" onclick="react('${e.id}','insights')">💡 Great insight (${e.insights||0})</button>
+          <button class="btn btn-ghost btn-sm" onclick="copyEntry('${e.id}')">Copy</button>
+          <button class="btn btn-ghost btn-sm" onclick="openEditModal('${e.id}')">Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="confirmDelete('${e.id}')">Delete</button>
+        </div>
+
+        <div class="comments">
+          ${(e.comments||[]).map(c => `
+            <div class="comment">
+              <div class="c-head">${escapeHtml(c.author)}<span>${fmtDate(c.created_at.slice(0,10))}</span></div>
+              ${escapeHtml(c.comment)}
+            </div>`).join("")}
+          <form class="comment-form" onsubmit="handleAddComment(event, '${e.id}')">
+            <input type="text" id="commentName-${e.id}" placeholder="Your name" style="max-width:130px;" required>
+            <input type="text" id="commentText-${e.id}" placeholder="Add your own experience related to this…" required>
+            <button class="btn btn-primary btn-sm" type="submit">Post</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function toggleEntry(id) {
+  state._openEntry = state._openEntry === id ? null : id;
+  const detail = document.getElementById("detail-" + id);
+  if (detail) detail.classList.toggle("open");
+}
+
+async function react(id, field) {
+  const entry = state.entries.find(e => e.id === id);
+  await Data.update(id, { [field]: (entry[field]||0) + 1 });
+  render();
+  const detail = document.getElementById("detail-" + id);
+  if (detail) detail.classList.add("open");
+}
+
+function copyEntry(id) {
+  const e = state.entries.find(x => x.id === id);
+  const text = `${e.title}\nBy ${e.author} · ${fmtDate(e.entry_date)} · ${e.work_setting}\n\nKey learning: ${e.key_learning}\n\nWhat happened: ${e.experience}`;
+  navigator.clipboard.writeText(text).then(() => showToast("Copied to clipboard")).catch(() => showToast("Couldn't copy — select the text manually."));
+}
+
+async function confirmDelete(id) {
+  if (!confirm("Delete this learning? This can't be undone.")) return;
+  await Data.remove(id);
+  showToast("Learning deleted");
+  render();
+}
+
+async function handleAddComment(evt, id) {
+  evt.preventDefault();
+  const author = document.getElementById(`commentName-${id}`).value.trim();
+  const text = document.getElementById(`commentText-${id}`).value.trim();
+  if (!author || !text) return;
+  await Data.addComment(id, author, text);
+  state._openEntry = id;
+  render();
+}
+
+function emptyState(title, sub) {
+  return `<div class="card empty-state"><div class="glyph">🌱</div><h4>${title}</h4><p>${sub}</p></div>`;
+}
+
+/* ---------------------------------------------------------------------------
+   EDIT MODAL
+   --------------------------------------------------------------------------- */
+function openEditModal(id) {
+  const e = state.entries.find(x => x.id === id);
+  state.editingId = id;
+  const topics = getAllTopics();
+  document.getElementById("editModal").innerHTML = `
+    <div class="modal-head"><h3>Edit learning</h3><button class="modal-close" onclick="closeEditModal()">×</button></div>
+    <form onsubmit="handleEditSave(event)">
+      <div class="form-row"><label>Title</label><input type="text" id="e_title" value="${escapeHtml(e.title)}" required></div>
+      <div class="form-row"><label>Key learning</label><textarea id="e_key" required>${escapeHtml(e.key_learning)}</textarea></div>
+      <div class="form-row"><label>What happened</label><textarea id="e_experience">${escapeHtml(e.experience||"")}</textarea></div>
+      <div class="form-row"><label>What worked</label><textarea id="e_worked">${escapeHtml(e.what_worked||"")}</textarea></div>
+      <div class="form-row"><label>What could be improved</label><textarea id="e_improve">${escapeHtml(e.what_improve||"")}</textarea></div>
+      <div class="form-row"><label>Next time</label><textarea id="e_next">${escapeHtml(e.next_time||"")}</textarea></div>
+      <div class="form-row"><label>Tags (comma separated)</label><input type="text" id="e_tags" value="${escapeHtml((e.tags||[]).join(", "))}"></div>
+      <div class="form-foot">
+        <button type="submit" class="btn btn-primary">Save changes</button>
+        <button type="button" class="btn btn-ghost" onclick="closeEditModal()">Cancel</button>
+      </div>
+    </form>
+  `;
+  document.getElementById("editBackdrop").classList.add("open");
+}
+function closeEditModal() {
+  document.getElementById("editBackdrop").classList.remove("open");
+  state.editingId = null;
+}
+async function handleEditSave(evt) {
+  evt.preventDefault();
+  const id = state.editingId;
+  await Data.update(id, {
+    title: document.getElementById("e_title").value.trim(),
+    key_learning: document.getElementById("e_key").value.trim(),
+    experience: document.getElementById("e_experience").value.trim(),
+    what_worked: document.getElementById("e_worked").value.trim(),
+    what_improve: document.getElementById("e_improve").value.trim(),
+    next_time: document.getElementById("e_next").value.trim(),
+    tags: document.getElementById("e_tags").value.split(",").map(t=>t.trim()).filter(Boolean)
+  });
+  closeEditModal();
+  showToast("Changes saved");
+  render();
+}
+
+/* ---------------------------------------------------------------------------
+   TOPICS LIBRARY
+   --------------------------------------------------------------------------- */
+function renderTopics() {
+  const topics = getAllTopics();
+  const counts = {};
+  state.entries.forEach(e => e.topics.forEach(t => counts[t] = (counts[t]||0)+1));
+
+  return `
+    <div class="page-head">
+      <h1>Topics library</h1>
+      <p>The journal, organized as a knowledge base rather than a diary. Click a topic to browse everything filed under it.</p>
+    </div>
+    <div class="topic-grid">
+      ${topics.map(t => `
+        <button class="card topic-tile" style="--topic-color:${topicColor(t)}" onclick="navigate('topicDetail','${escapeHtml(t)}')">
+          <div class="t-name">${escapeHtml(t)}</div>
+          <div class="t-count">${counts[t]||0} learning${counts[t]===1?"":"s"}</div>
+        </button>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderTopicDetail() {
+  const topic = state.activeTopicDetail;
+  const items = state.entries.filter(e => e.topics.includes(topic)).sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+  return `
+    <button class="back-link" onclick="navigate('topics')">${ICONS.back} All topics</button>
+    <div class="page-head">
+      <h1 style="display:flex;align-items:center;gap:10px;"><span style="width:12px;height:12px;border-radius:3px;background:${topicColor(topic)};display:inline-block;"></span>${escapeHtml(topic)}</h1>
+      <p>${items.length} learning${items.length===1?"":"s"} filed under this topic.</p>
+    </div>
+    <div class="topic-detail-list">
+      ${items.length ? items.map(e => `
+        <div class="card topic-detail-item">
+          <div>
+            <div class="ti-title" onclick="navigate('journal'); setFilter('topic','${escapeHtml(topic)}');">${escapeHtml(e.title)}</div>
+            <div class="ti-meta">${escapeHtml(e.author)} · ${fmtDate(e.entry_date)}</div>
+          </div>
+          <span class="pill setting">${escapeHtml(e.work_setting)}</span>
+        </div>
+      `).join("") : emptyState("Nothing here yet", "Entries tagged with this topic will show up here.")}
+    </div>
+  `;
+}
+
+/* ---------------------------------------------------------------------------
+   INSIGHTS
+   --------------------------------------------------------------------------- */
+function renderInsights() {
+  const topicCounts = {};
+  state.entries.forEach(e => e.topics.forEach(t => topicCounts[t] = (topicCounts[t]||0)+1));
+  const topTopics = Object.entries(topicCounts).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const maxTopicCount = Math.max(1, ...topTopics.map(t=>t[1]));
+
+  const authorCounts = {};
+  state.entries.forEach(e => authorCounts[e.author] = (authorCounts[e.author]||0)+1);
+  const topAuthors = Object.entries(authorCounts).sort((a,b)=>b[1]-a[1]).slice(0,6);
+
+  const settingCounts = {};
+  state.entries.forEach(e => settingCounts[e.work_setting] = (settingCounts[e.work_setting]||0)+1);
+  const maxSettingCount = Math.max(1, ...Object.values(settingCounts));
+
+  return `
+    <div class="page-head">
+      <h1>Insights</h1>
+      <p>Where the team's learnings are concentrated — useful for spotting patterns and Playbook candidates.</p>
+    </div>
+
+    <div class="insight-grid">
+      <div class="card insight-card">
+        <h4>Learnings by topic</h4>
+        ${topTopics.length ? topTopics.map(([t,c]) => `
+          <div class="bar-row">
+            <div class="b-label">${escapeHtml(t)}</div>
+            <div class="bar-track"><div class="bar-fill" style="width:${(c/maxTopicCount)*100}%; background:${topicColor(t)}"></div></div>
+            <div class="b-num">${c}</div>
+          </div>
+        `).join("") : `<p style="color:var(--muted); font-size:13.5px;">No entries yet.</p>`}
+      </div>
+
+      <div class="card insight-card">
+        <h4>Most active contributors</h4>
+        ${topAuthors.length ? topAuthors.map(([a,c]) => `
+          <div class="leader-row">
+            <div class="avatar">${initials(a)}</div>
+            <div class="l-name">${escapeHtml(a)}</div>
+            <div class="l-count">${c} entr${c===1?"y":"ies"}</div>
+          </div>
+        `).join("") : `<p style="color:var(--muted); font-size:13.5px;">No entries yet.</p>`}
+      </div>
+    </div>
+
+    <div class="card insight-card">
+      <h4>Learnings by work setting</h4>
+      ${Object.keys(settingCounts).length ? Object.entries(settingCounts).sort((a,b)=>b[1]-a[1]).map(([s,c]) => `
+        <div class="bar-row">
+          <div class="b-label">${escapeHtml(s)}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${(c/maxSettingCount)*100}%; background:var(--signal)"></div></div>
+          <div class="b-num">${c}</div>
+        </div>
+      `).join("") : `<p style="color:var(--muted); font-size:13.5px;">No entries yet.</p>`}
+    </div>
+  `;
+}
+
+/* ============================================================================
+   BOOT
+   ============================================================================ */
+async function boot() {
+  render(); // paint shell immediately (with empty state) while data loads
+  await Data.loadAll();
+  render();
+}
+boot();
+</script>
+</body>
+</html>
+
+<!-- ============================================================================
+     SETUP INSTRUCTIONS
+     (Also provided separately as SETUP.md alongside this file.)
+     ============================================================================
+
+1) CREATE A SUPABASE PROJECT
+   - Go to https://supabase.com, sign up/log in, and click "New project".
+   - Pick any name (e.g. "bloomled-journal") and a database password (save it
+     somewhere safe — you likely won't need it day to day, but keep it).
+   - Wait ~1-2 minutes for the project to finish provisioning.
+
+2) CREATE THE DATABASE TABLES
+   - In your Supabase project, go to the "SQL Editor" tab, click "New query",
+     paste the SQL below, and click "Run".
+
+   -----------------------------------------------------------------------
+   create table learnings (
+     id uuid primary key default gen_random_uuid(),
+     created_at timestamptz default now(),
+     author text not null,
+     entry_date date not null,
+     title text not null,
+     topics text[] not null default '{}',
+     work_setting text not null,
+     experience text,
+     key_learning text not null,
+     what_worked text,
+     what_improve text,
+     next_time text,
+     tags text[] default '{}',
+     likes int default 0,
+     insights int default 0
+   );
+
+   create table comments (
+     id uuid primary key default gen_random_uuid(),
+     created_at timestamptz default now(),
+     learning_id uuid references learnings(id) on delete cascade,
+     author text not null,
+     comment text not null
+   );
+
+   -- Allow the whole team (using the public "anon" key) to read and write.
+   -- This keeps setup simple for an internal tool used only inside the team.
+   -- If you later want logins/permissions per person, ask to have this
+   -- tightened with proper Supabase Auth + Row Level Security policies.
+   alter table learnings enable row level security;
+   alter table comments enable row level security;
+
+   create policy "Allow all access to learnings" on learnings
+     for all using (true) with check (true);
+   create policy "Allow all access to comments" on comments
+     for all using (true) with check (true);
+   -----------------------------------------------------------------------
+
+3) GET YOUR URL AND ANON KEY
+   - In Supabase, go to Project Settings → API.
+   - Copy the "Project URL" and the "anon public" key.
+
+4) ADD THEM TO THIS FILE
+   - Open this HTML file in a text editor.
+   - Find this block near the top of the <script> section:
+       const SUPABASE_URL = "YOUR_SUPABASE_URL_HERE";
+       const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY_HERE";
+   - Replace the two placeholder strings with your real URL and key.
+   - Save the file. The app will automatically switch out of Demo Mode —
+     you'll see "Connected — shared with the team" at the bottom of the
+     left menu instead of "Demo mode".
+
+5) TEST IT LOCALLY
+   - Just double-click the HTML file to open it in your browser, or
+   - Right-click → Open with → your browser of choice.
+   - Add a test learning and refresh the page — if it's still there after
+     refreshing, Supabase is working correctly.
+   - Open the file on a second device (or ask a teammate to open the same
+     file) and confirm you can both see each other's entries.
+
+6) PUBLISH / SHARE IT ONLINE (so everyone uses one link)
+   Easiest free option — Netlify Drop:
+   - Go to https://app.netlify.com/drop
+   - Drag this HTML file (rename it to index.html if it isn't already)
+     onto the page.
+   - Netlify gives you a live link in seconds — share that link with the team.
+
+   Alternative — GitHub Pages:
+   - Create a new GitHub repository, upload this file as index.html.
+   - In the repo, go to Settings → Pages, set the source to your main
+     branch, and GitHub will give you a public URL.
+
+   Either way, everyone opens the same link, and because the data lives in
+   Supabase (not in the file), everyone sees the same shared journal.
+
+NOTES
+   - The public "anon" key is meant to be used in client-side apps like this
+     one — it is not a secret admin key. Still, only share the live link
+     internally, since as configured here anyone with the link can read and
+     write entries.
+   - "Comments" let a teammate add their own related experience under
+     someone else's entry — separate from writing a brand new learning.
+   - Custom topics added via the "+ New topic" chip in the Add Learning form
+     only persist for the current browser session unless you also save them
+     to Supabase — ask if you'd like a small "topics" table added so new
+     topics show up for everyone permanently.
+   - A natural next step once this is in daily use: a "BloomLED Playbook"
+     section that turns repeated learnings (like the ones already tagged
+     "Best Practices" or "Mistakes & Lessons Learned") into official SOPs.
+     Happy to build that as a v2 once the journal has a few months of entries.
+============================================================================ -->
