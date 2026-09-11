@@ -176,6 +176,21 @@
   .rail-foot .dot.live { background: var(--bloom); }
   .rail-foot .dot.demo { background: var(--signal); }
 
+  .admin-toggle {
+    display: inline-block;
+    margin-top: 8px;
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--muted);
+    text-align: left;
+    cursor: pointer;
+  }
+  .admin-toggle:hover { color: var(--ink-soft); text-decoration: underline; }
+  .admin-toggle.admin-on { color: var(--bloom-deep); }
+
   /* Mobile bottom tab bar */
   .tabbar {
     display: none;
@@ -389,8 +404,10 @@
 
   .comments { margin-top: 16px; }
   .comment { padding: 10px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
-  .comment .c-head { font-weight: 600; font-size: 13px; margin-bottom: 2px; }
+  .comment .c-head { font-weight: 600; font-size: 13px; margin-bottom: 2px; display: flex; align-items: center; gap: 4px; }
   .comment .c-head span { font-weight: 500; color: var(--muted); margin-left: 6px; }
+  .comment-del { margin-left: auto; background: none; border: none; padding: 0; font-size: 11.5px; font-weight: 600; color: var(--muted); cursor: pointer; }
+  .comment-del:hover { color: var(--danger); text-decoration: underline; }
   .comment-form { display: flex; gap: 8px; margin-top: 10px; }
   .comment-form input { flex: 1; font-family: inherit; font-size: 13.5px; padding: 8px 10px; border-radius: var(--radius-s); border: 1px solid var(--line); }
 
@@ -547,6 +564,19 @@ if (!DEMO_MODE) {
 }
 
 /* ============================================================================
+   ADMIN PIN
+   ----------------------------------------------------------------------------
+   This app doesn't have individual team-member logins (kept simple on
+   purpose). Instead, Delete buttons for learnings and comments are hidden
+   until someone enters this PIN via the "Admin mode" link at the bottom of
+   the sidebar. Change this to your own PIN before sharing the file — anyone
+   who has this file's source (or views page source) can technically see it,
+   so treat this as a light deterrent against accidental/casual deletion by
+   the team, not as real security against a determined bad actor.
+   ============================================================================ */
+const ADMIN_PIN = "bloom2026";
+
+/* ============================================================================
    STATIC DATA: topics + colors, work settings
    ============================================================================ */
 const DEFAULT_TOPICS = [
@@ -577,7 +607,8 @@ let state = {
   customTopics: [],             // topics added by users beyond the defaults
   filters: { q: "", topic: "", author: "", setting: "", tag: "" },
   activeTopicDetail: null,
-  editingId: null
+  editingId: null,
+  isAdmin: false                // gates Delete buttons for learnings + comments
 };
 
 function getAllTopics() {
@@ -604,7 +635,7 @@ function seedDemoData() {
       next_time: "Use the 'binigay sa inyo ay kasama na' script from the RTB FAQ sheet as the opening line, not a fallback.",
       tags: ["price objection", "estimate", "client education"],
       likes: 4, insights: 2, created_at: new Date(Date.now() - 1*3600*1000).toISOString(),
-      comments: [{ author: "Jansen Milagrosa", comment: "Same thing happened to me sa Ortigas client last week, sobrang useful talaga itong script na 'to.", created_at: new Date().toISOString() }]
+      comments: [{ id: "seed-c1", author: "Jansen Milagrosa", comment: "Same thing happened to me sa Ortigas client last week, sobrang useful talaga itong script na 'to.", created_at: new Date().toISOString() }]
     },
     {
       id: "demo-2", author: "Dennis Apoc", entry_date: daysAgo(1),
@@ -631,7 +662,7 @@ function seedDemoData() {
       next_time: "Build a PhilGEPS submission checklist and have a second person verify before the deadline.",
       tags: ["philgeps", "compliance", "checklist"],
       likes: 8, insights: 5, created_at: new Date(Date.now() - 3*24*3600*1000).toISOString(),
-      comments: [{ author: "Emman Apostol", comment: "Good catch — let's turn this into an official Playbook item this week.", created_at: new Date().toISOString() }]
+      comments: [{ id: "seed-c2", author: "Emman Apostol", comment: "Good catch — let's turn this into an official Playbook item this week.", created_at: new Date().toISOString() }]
     },
     {
       id: "demo-4", author: "Lennard Agulto", entry_date: daysAgo(4),
@@ -720,14 +751,23 @@ const Data = {
 
   async addComment(learningId, author, comment) {
     const entry = state.entries.find(e => e.id === learningId);
-    const newComment = { author, comment, created_at: new Date().toISOString() };
     if (DEMO_MODE) {
+      const newComment = { id: "c-" + Date.now(), author, comment, created_at: new Date().toISOString() };
       entry.comments.push(newComment);
       return;
     }
-    const { error } = await supabaseClient.from("comments").insert([{ learning_id: learningId, author, comment }]);
+    const { data, error } = await supabaseClient.from("comments").insert([{ learning_id: learningId, author, comment }]).select();
     if (error) { console.error(error); showToast("Couldn't post comment — check Supabase config."); return; }
-    entry.comments.push(newComment);
+    entry.comments.push(data[0]);
+  },
+
+  async deleteComment(learningId, commentId) {
+    const entry = state.entries.find(e => e.id === learningId);
+    if (!DEMO_MODE) {
+      const { error } = await supabaseClient.from("comments").delete().eq("id", commentId);
+      if (error) { console.error(error); showToast("Couldn't remove comment — check Supabase config."); return; }
+    }
+    entry.comments = entry.comments.filter(c => c.id !== commentId);
   }
 };
 
@@ -762,9 +802,34 @@ function renderNav() {
     </button>`;
   document.getElementById("railNav").innerHTML = NAV_ITEMS.map(linkHtml).join("");
   document.getElementById("tabbarNav").innerHTML = NAV_ITEMS.map(linkHtml).join("");
-  document.getElementById("railFoot").innerHTML = DEMO_MODE
+
+  const connectionLine = DEMO_MODE
     ? `<span class="dot demo"></span>Demo mode — connect Supabase to save & share`
     : `<span class="dot live"></span>Connected — shared with the team`;
+
+  const adminLine = state.isAdmin
+    ? `<button class="admin-toggle admin-on" onclick="adminLogout()">🔓 Admin mode on — click to exit</button>`
+    : `<button class="admin-toggle" onclick="adminLogin()">🔒 Admin mode</button>`;
+
+  document.getElementById("railFoot").innerHTML = `${connectionLine}<br>${adminLine}`;
+}
+
+function adminLogin() {
+  const pin = prompt("Enter admin PIN to unlock Delete controls:");
+  if (pin === null) return; // cancelled
+  if (pin === ADMIN_PIN) {
+    state.isAdmin = true;
+    showToast("Admin mode on — Delete controls unlocked");
+    render();
+  } else {
+    showToast("Incorrect PIN");
+  }
+}
+
+function adminLogout() {
+  state.isAdmin = false;
+  showToast("Admin mode off");
+  render();
 }
 
 function navigate(route, extra) {
@@ -1137,13 +1202,15 @@ function entryCard(e, expandable) {
           <button class="reaction-btn" onclick="react('${e.id}','insights')">💡 Great insight (${e.insights||0})</button>
           <button class="btn btn-ghost btn-sm" onclick="copyEntry('${e.id}')">Copy</button>
           <button class="btn btn-ghost btn-sm" onclick="openEditModal('${e.id}')">Edit</button>
-          <button class="btn btn-danger btn-sm" onclick="confirmDelete('${e.id}')">Delete</button>
+          ${state.isAdmin ? `<button class="btn btn-danger btn-sm" onclick="confirmDelete('${e.id}')">Delete</button>` : ""}
         </div>
 
         <div class="comments">
           ${(e.comments||[]).map(c => `
             <div class="comment">
-              <div class="c-head">${escapeHtml(c.author)}<span>${fmtDate(c.created_at.slice(0,10))}</span></div>
+              <div class="c-head">${escapeHtml(c.author)}<span>${fmtDate(c.created_at.slice(0,10))}</span>
+                ${state.isAdmin && c.id ? `<button class="comment-del" onclick="confirmDeleteComment('${e.id}','${c.id}')">Remove</button>` : ""}
+              </div>
               ${escapeHtml(c.comment)}
             </div>`).join("")}
           <form class="comment-form" onsubmit="handleAddComment(event, '${e.id}')">
@@ -1181,6 +1248,14 @@ async function confirmDelete(id) {
   if (!confirm("Delete this learning? This can't be undone.")) return;
   await Data.remove(id);
   showToast("Learning deleted");
+  render();
+}
+
+async function confirmDeleteComment(learningId, commentId) {
+  if (!confirm("Remove this comment? This can't be undone.")) return;
+  await Data.deleteComment(learningId, commentId);
+  state._openEntry = learningId;
+  showToast("Comment removed");
   render();
 }
 
