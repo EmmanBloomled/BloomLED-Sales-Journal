@@ -1114,7 +1114,13 @@ async function handleAddLearning(evt) {
     tags: document.getElementById("f_tags").value.split(",").map(t => t.trim()).filter(Boolean)
   };
 
-  await Data.add(entry);
+  const saved = await Data.add(entry);
+  if (!saved) {
+    // Data.add already showed a specific error toast (e.g. "Couldn't save —
+    // check Supabase config"). Stay on the form so nothing typed is lost,
+    // and don't celebrate a save that didn't actually happen.
+    return;
+  }
   playThankYouChime();
   showToast("Thank you for sharing your insight! 🌱");
   navigate("journal");
