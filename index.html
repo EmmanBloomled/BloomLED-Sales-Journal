@@ -278,8 +278,18 @@
     pointer-events: none;
     transition: opacity 0.18s ease, transform 0.18s ease;
     z-index: 200;
+    max-width: min(90vw, 520px);
+    display: flex;
+    align-items: center;
+    gap: 12px;
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+  .toast.toast-error { background: var(--danger); }
+  .toast-close {
+    background: none; border: none; color: inherit; font-size: 13px;
+    opacity: 0.85; padding: 0 0 0 4px; flex-shrink: 0;
+  }
+  .toast-close:hover { opacity: 1; }
 
   /* --------------------------------------------------------------------------
      DASHBOARD
@@ -705,7 +715,7 @@ const Data = {
     }
     const { data: learnings, error } = await supabaseClient
       .from("learnings").select("*").order("created_at", { ascending: false });
-    if (error) { console.error(error); showToast("Couldn't load entries — check Supabase config."); return; }
+    if (error) { console.error(error); showToast(`Couldn't load entries: ${error.message}`, true); return; }
 
     const { data: comments } = await supabaseClient.from("comments").select("*").order("created_at", { ascending: true });
 
@@ -724,7 +734,7 @@ const Data = {
       return newEntry;
     }
     const { data, error } = await supabaseClient.from("learnings").insert([entry]).select();
-    if (error) { console.error(error); showToast("Couldn't save — check Supabase config."); return null; }
+    if (error) { console.error(error); showToast(`Couldn't save: ${error.message}`, true); return null; }
     const newEntry = { ...data[0], comments: [] };
     state.entries.unshift(newEntry);
     return newEntry;
@@ -737,14 +747,14 @@ const Data = {
       return;
     }
     const { error } = await supabaseClient.from("learnings").update(fields).eq("id", id);
-    if (error) { console.error(error); showToast("Couldn't update — check Supabase config."); return; }
+    if (error) { console.error(error); showToast(`Couldn't update: ${error.message}`, true); return; }
     Object.assign(local, fields);
   },
 
   async remove(id) {
     if (!DEMO_MODE) {
       const { error } = await supabaseClient.from("learnings").delete().eq("id", id);
-      if (error) { console.error(error); showToast("Couldn't delete — check Supabase config."); return; }
+      if (error) { console.error(error); showToast(`Couldn't delete: ${error.message}`, true); return; }
     }
     state.entries = state.entries.filter(e => e.id !== id);
   },
@@ -757,7 +767,7 @@ const Data = {
       return;
     }
     const { data, error } = await supabaseClient.from("comments").insert([{ learning_id: learningId, author, comment }]).select();
-    if (error) { console.error(error); showToast("Couldn't post comment — check Supabase config."); return; }
+    if (error) { console.error(error); showToast(`Couldn't post comment: ${error.message}`, true); return; }
     entry.comments.push(data[0]);
   },
 
@@ -765,7 +775,7 @@ const Data = {
     const entry = state.entries.find(e => e.id === learningId);
     if (!DEMO_MODE) {
       const { error } = await supabaseClient.from("comments").delete().eq("id", commentId);
-      if (error) { console.error(error); showToast("Couldn't remove comment — check Supabase config."); return; }
+      if (error) { console.error(error); showToast(`Couldn't remove comment: ${error.message}`, true); return; }
     }
     entry.comments = entry.comments.filter(c => c.id !== commentId);
   }
@@ -842,12 +852,23 @@ function navigate(route, extra) {
 /* ============================================================================
    HELPERS
    ============================================================================ */
-function showToast(msg) {
+/* isError=true makes the toast stick on screen with a close button and a
+   red style, instead of auto-hiding after 2.6s — so an error is never
+   missed just because it disappeared too fast to read or screenshot. */
+function showToast(msg, isError) {
   const t = document.getElementById("toast");
-  t.textContent = msg;
+  t.innerHTML = isError
+    ? `<span>⚠️ ${escapeHtml(msg)}</span><button class="toast-close" onclick="dismissToast()">✕</button>`
+    : escapeHtml(msg);
+  t.classList.toggle("toast-error", !!isError);
   t.classList.add("show");
   clearTimeout(showToast._timer);
-  showToast._timer = setTimeout(() => t.classList.remove("show"), 2600);
+  if (!isError) {
+    showToast._timer = setTimeout(() => t.classList.remove("show"), 2600);
+  }
+}
+function dismissToast() {
+  document.getElementById("toast").classList.remove("show");
 }
 
 /* A tiny two-note "thank you" chime, played only right after someone
@@ -1437,7 +1458,12 @@ function renderInsights() {
    ============================================================================ */
 async function boot() {
   render(); // paint shell immediately (with empty state) while data loads
-  await Data.loadAll();
+  try {
+    await Data.loadAll();
+  } catch (e) {
+    console.error(e);
+    showToast(`Couldn't connect to Supabase: ${e.message || e}`, true);
+  }
   render();
 }
 boot();
